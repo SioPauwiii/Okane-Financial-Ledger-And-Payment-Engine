@@ -1,0 +1,1 @@
+ALTER TABLE transactions RENAME COLUMN amount_transfered TO amount_transferred;

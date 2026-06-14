@@ -9,4 +9,5 @@ pub fn auth_routes() -> Router<AppState> {
         // .route("/logout", post(auth_handlers::logout))
         // .route("/refresh", post(auth_handlers::refresh_token))
         // .route("/me", get(auth_handlers::get_me))
+
 }

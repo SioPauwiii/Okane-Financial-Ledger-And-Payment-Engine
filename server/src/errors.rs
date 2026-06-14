@@ -21,12 +21,12 @@ impl IntoResponse for AppError {
             AppError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
         };
-        Json(json!({ "error": message })).into_response()
+        (status, Json(json!({ "error": message }))).into_response()
     }
 }
 
 impl From<sqlx::Error> for AppError {
-    fn from(_: sqlx::Error) -> Self {
-        AppError::InternalServerError("Database error".to_string())
+    fn from(err: sqlx::Error) -> Self {
+        AppError::InternalServerError(format!("Database error: {err}"))
     }
 }

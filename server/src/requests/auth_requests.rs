@@ -1,6 +1,5 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use chrono::NaiveDate;
-use crate::models::users_models::User;
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterRequest {
@@ -24,11 +23,4 @@ pub struct RegisterRequest {
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AuthResponse {
-    pub message: String,
-    pub user: User,
-    pub access_token: Option<String>,
 }

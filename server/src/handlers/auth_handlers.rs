@@ -3,42 +3,35 @@ use crate::{
     errors::AppError,
     state::AppState, 
     services::auth_services, 
-    requests::auth_requests::{AuthResponse, LoginRequest, RegisterRequest},
+    requests::auth_requests::{LoginRequest, RegisterRequest},
+    responses::auth_responses::{RegisterResponse, LoginResponse},
 };
 
 pub async fn register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterRequest>,
-) -> Result<(StatusCode, Json<AuthResponse>), AppError> {
+) -> Result<(StatusCode, Json<RegisterResponse>), AppError> {
     let response = auth_services::register(&state, payload).await?;
     Ok((
         StatusCode::CREATED,
-        Json(AuthResponse {
-            message: "User registered successfully".to_string(),
-            user: response.user,
-            access_token: response.access_token,
-        }),
+        Json(response),
     ))
 }
 
 pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
-) -> Result<(StatusCode, Json<AuthResponse>), AppError> {
+) -> Result<(StatusCode, Json<LoginResponse>), AppError> {
     let response = auth_services::login(&state, payload).await?;
     Ok((
         StatusCode::OK,
-        Json(AuthResponse {
-            message: "User logged in successfully".to_string(),
-            user: response.user,
-            access_token: response.access_token,
-        }),
+        Json(response),
     ))
 }
 
 // pub async fn logout(
 //     State(state): State<AppState>,
-//     Json(payload): Json<auth_requests::AuthResponse>,
+//     Json(payload): Json<auth_requests::RegisterResponse>,
 // ) -> Result<(StatusCode, Json<auth_requests::LogoutResponse>), AppError> {
 //     auth_services::logout(&state, payload).await?;
 //     Ok((
@@ -51,7 +44,7 @@ pub async fn login(
 
 // pub async fn me(
 //     State(state): State<AppState>,
-//     Json(payload): Json<auth_requests::AuthResponse>,
+//     Json(payload): Json<auth_requests::RegisterResponse>,
 // ) -> Result<(StatusCode, Json<auth_requests::MeResponse>), AppError> {
 //     let response = auth_services::me(&state, payload).await?;
 //     Ok((

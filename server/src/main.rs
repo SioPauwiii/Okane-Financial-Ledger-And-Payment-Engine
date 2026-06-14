@@ -5,6 +5,7 @@ mod models;
 mod routes;
 mod services;
 mod requests;
+mod responses;
 mod state;
 
 use axum::serve;
@@ -14,6 +15,10 @@ use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+    .with_env_filter(tracing_subscriber::EnvFilter::new("info"))
+    .init();
+
     dotenvy::dotenv().ok();
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");

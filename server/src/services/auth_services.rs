@@ -1,7 +1,9 @@
 use crate::{
     errors::AppError,
     state::AppState,
-    requests::auth_requests::{AuthResponse, LoginRequest, RegisterRequest},
+    requests::auth_requests::{LoginRequest, RegisterRequest},
+    responses::auth_responses::{RegisterResponse, LoginResponse},
+    responses::jwt_responses::JwtClaims,
     models::users_models::User,
 };
 use argon2::{
@@ -9,6 +11,7 @@ use argon2::{
     Argon2,
 };
 use chrono::NaiveDate;
+use jsonwebtoken::{encode, EncodingKey, Header};
 
 // user checking and validation
 pub async fn check_email_exists(
@@ -76,13 +79,30 @@ pub async fn hash_password(
     Ok(hashed)
 }
 
+// JWT generation
+pub async fn generate_jwt(
+    user: &User,
+) -> Result<String, AppError> {
+    let claims = JwtClaims {
+        sub: user.id,
+        email: user.email.clone(),
+        user_type: user.user_type.clone(),
+        exp: (chrono::Utc::now().timestamp() + 604800) as usize,
+    };
+    let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "secret".into());
+    encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_ref()))
+        .map_err(|_| AppError::InternalServerError("Failed to generate JWT".to_string()))
+}
+
 // user registration and authentication
 pub async fn register(
     state: &AppState, 
     payload: RegisterRequest,
-) -> Result<AuthResponse, AppError> {
+) -> Result<RegisterResponse, AppError> {
     // validate input
-    check_email_exists(state, &payload.email).await?;
+    if check_email_exists(state, &payload.email).await? {
+        return Err(AppError::BadRequest("Email already exists".to_string()));
+    }
     validate_age(payload.birth_date).await?;
     confirm_password(&payload.password, &payload.confirm_password).await?;
 
@@ -113,17 +133,19 @@ pub async fn register(
     .fetch_one(&state.db)
     .await?;
 
-    Ok(AuthResponse {
+    let access_token = generate_jwt(&user).await?;
+
+    Ok(RegisterResponse {
         message: "User registered successfully".to_string(),
-        user,
-        access_token: None,
+        user: Some(user),
+        access_token: Some(access_token),
     })
 }
 
 pub async fn login(
     state: &AppState,
     payload: LoginRequest,
-) -> Result<AuthResponse, AppError> {
+) -> Result<LoginResponse, AppError> {
     let user = sqlx::query_as::<_, User>(
         "SELECT * FROM users WHERE email = $1"
     )
@@ -136,9 +158,10 @@ pub async fn login(
         return Err(AppError::Unauthorized("Invalid email or password".to_string()));
     }
 
-    Ok(AuthResponse {
-        message: "User logged in successfully".to_string(),
-        user,
-        access_token: None,
+    let access_token = generate_jwt(&user).await?;
+    
+    Ok(LoginResponse { 
+        message: "Login successful".to_string(),
+        access_token 
     })
 }

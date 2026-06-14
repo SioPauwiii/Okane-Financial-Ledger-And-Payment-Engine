@@ -19,9 +19,9 @@ pub struct User {
     pub birth_date: Option<NaiveDate>,
     pub contact_no: String,
     pub user_type: String, // customer, admin
+    pub password: String,
 
     #[serde(skip_serializing)]
-    pub password: String,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 } 

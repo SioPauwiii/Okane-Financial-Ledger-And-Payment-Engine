@@ -1,3 +1,3 @@
-pub mod users;
-pub mod accounts;
-pub mod transactions;
+pub mod users_models;
+pub mod accounts_models;
+pub mod transactions_models;

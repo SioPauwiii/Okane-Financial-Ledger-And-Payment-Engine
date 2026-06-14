@@ -1,4 +1,4 @@
-pub mod accounts;
-pub mod users;
-pub mod transactions;
-pub mod auth;
+pub mod accounts_services;
+pub mod users_services;
+pub mod transactions_services;
+pub mod auth_services;

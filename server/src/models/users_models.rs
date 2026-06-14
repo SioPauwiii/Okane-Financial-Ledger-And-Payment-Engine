@@ -1,8 +1,8 @@
-use chrono::NaiveDateTime;
-use rust_decimal::Decimal;
+use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: i64,
     pub email: String,
@@ -16,10 +16,12 @@ pub struct User {
     pub zip_code: String,
     pub sex: Option<String>,
     pub nationality: Option<String>,
+    pub birth_date: Option<NaiveDate>,
+    pub contact_no: String,
+    pub user_type: String, // customer, admin
 
     #[serde(skip_serializing)]
     pub password: String,
-    pub user_type: String, // customer, admin
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 } 

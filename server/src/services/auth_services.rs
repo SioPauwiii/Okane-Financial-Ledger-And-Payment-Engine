@@ -5,6 +5,7 @@ use crate::{
     responses::auth_responses::{RegisterResponse, LoginResponse},
     responses::jwt_responses::JwtClaims,
     models::users_models::User,
+    services::cookie_services,
 };
 use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -12,7 +13,6 @@ use argon2::{
 };
 use chrono::NaiveDate;
 use jsonwebtoken::{encode, EncodingKey, Header};
-
 // user checking and validation
 pub async fn check_email_exists(
     state: &AppState, 
@@ -89,7 +89,7 @@ pub async fn generate_jwt(
         user_type: user.user_type.clone(),
         exp: (chrono::Utc::now().timestamp() + 604800) as usize,
     };
-    let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "secret".into());
+    let secret = cookie_services::jwt_secret();
     encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_ref()))
         .map_err(|_| AppError::InternalServerError("Failed to generate JWT".to_string()))
 }

@@ -1,6 +1,6 @@
-use serde::{Serialize};
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct JwtClaims {
     pub sub: i64, // user id
     pub email: String,

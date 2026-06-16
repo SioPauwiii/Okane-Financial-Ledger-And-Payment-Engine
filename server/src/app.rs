@@ -1,7 +1,8 @@
 use axum::{routing::get, Router};
-use crate::{handlers::*, state::AppState};
+use crate::state::AppState;
 use crate::routes::auth_routes::auth_routes;
 use crate::routes::users_routes::users_routes;
+use crate::routes::accounts_routes::accounts_routes;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
@@ -28,6 +29,7 @@ pub fn build_server(state: AppState) -> Router {
         .route("/health", get(|| async { "OK" }))
         .nest("/api/auth", auth_routes())
         .nest("/api/user", users_routes())
+        .nest("/api/account", accounts_routes())
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)

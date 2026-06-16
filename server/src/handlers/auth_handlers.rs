@@ -4,7 +4,6 @@ use crate::{
     state::AppState, 
     services::auth_services::{self}, 
     requests::auth_requests::{LoginRequest, RegisterRequest},
-    responses::auth_responses::{RegisterResponse, LoginResponse},
     services::cookie_services,
 };
 

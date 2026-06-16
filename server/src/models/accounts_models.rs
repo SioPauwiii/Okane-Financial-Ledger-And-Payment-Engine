@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Account {
-    pub id: i64,
-    pub user_id: i64,
+    pub id: i32,
+    pub user_id: i32,
     pub account_number: String,
     pub account_type: String, // checking, savings
     pub currency: String,

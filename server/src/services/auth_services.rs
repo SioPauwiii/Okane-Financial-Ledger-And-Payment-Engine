@@ -6,6 +6,7 @@ use crate::{
     responses::jwt_responses::JwtClaims,
     models::users_models::User,
     services::cookie_services,
+    services::accounts_services,
 };
 use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -133,11 +134,15 @@ pub async fn register(
     .fetch_one(&state.db)
     .await?;
 
+    // create user account
+    let account = accounts_services::create_account(state, &payload.email, "savings").await?;
+
     let access_token = generate_jwt(&user).await?;
 
     Ok(RegisterResponse {
         message: "User registered successfully".to_string(),
         user: Some(user),
+        account: Some(account),
         access_token: Some(access_token),
     })
 }

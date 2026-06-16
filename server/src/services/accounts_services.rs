@@ -2,11 +2,15 @@ use crate::{
     errors::AppError,
     state::AppState,
     models::accounts_models::Account,
-    models::users_models::User,
-    responses::account_responses::MyAccountResponse,
+    responses::account_responses::{MyAccountResponse, UserWithAccountRow},
     responses::jwt_responses::JwtClaims,
+    responses::account_responses::{DepositResponse, WithdrawalResponse},
+    services::transactions_services,
+
 };
 use jsonwebtoken::{decode, DecodingKey, Validation};
+use rust_decimal::Decimal;
+use serde_json::{json, Value};
 
 fn jwt_secret() -> String {
     std::env::var("JWT_SECRET").unwrap_or_else(|_| "secret".into())
@@ -47,6 +51,100 @@ pub async fn check_if_user_account_exists(
     
     Ok(())
 }
+
+pub async fn check_if_account_active(
+    state: &AppState,
+    user_id: &i32,
+) -> Result<(), AppError> {
+    let account = sqlx::query!(
+        "SELECT id FROM accounts WHERE user_id = $1 AND status = 'active'",
+        user_id
+    )
+    .fetch_optional(&state.db)
+    .await?;
+    
+    if account.is_none() {
+        return Err(AppError::NotFound("Account not found or inactive".into()));
+    }
+    
+    Ok(())
+}
+
+pub async fn check_amount_being_transferred(
+    _state: &AppState,
+    amount: &Decimal,
+) -> Result<(), AppError> {
+    if amount <= &Decimal::ZERO {
+        return Err(AppError::BadRequest("Amount must be greater than zero".into()));
+    }
+    
+    Ok(())
+}
+
+pub async fn compute_for_balance(
+    state: &AppState,
+    account_number: &String,
+) -> Result<Decimal, AppError>{
+    let transactions = sqlx::query!(
+        "SELECT * FROM transactions WHERE from_account_number = $1 OR to_account_number = $1",
+        account_number,
+    )
+    .fetch_all(&state.db)
+    .await?;
+    
+    let mut balance = Decimal::ZERO;
+    for transaction in transactions {
+        if transaction.from_account_number == Some(account_number.to_string()) {
+            balance -= transaction.amount_transferred;
+        } else {
+            balance += transaction.amount_transferred;
+        }
+    }
+
+    Ok(balance)
+}
+
+pub async fn record_balance(
+    state: &AppState,
+    account_number: &String,
+    balance: &Decimal,
+) -> Result<(), AppError> {
+    let account = sqlx::query!(
+        "UPDATE accounts SET balance = $1 WHERE account_number = $2",
+        balance,
+        account_number,
+    )
+    .execute(&state.db)
+    .await?;
+    
+    if account.rows_affected() == 0 {
+        return Err(AppError::NotFound("Account not found".into()));
+    }
+    
+    Ok(())
+}
+
+// pub async fn check_balance_and_transaction_latest(
+//     state: &AppState,
+//     account_number: &String,
+// ) -> Result<Decimal, AppError> {
+//     let transaction = sqlx::query!(
+//         "SELECT * FROM transactions WHERE from_account_number = $1 OR to_account_number = $1 ORDER BY created_at DESC LIMIT 1",
+//         account_number,
+//     )
+//     .fetch_optional(&state.db)
+//     .await?;
+    
+//     if let Some(transaction) = transaction {
+//         if transaction.from_account_number == Some(account_number.to_string()) {
+//             Ok(transaction.amount_transferred)
+//         } else {
+//             Ok(transaction.amount_transferred)
+//         }
+//     } else {
+//         Ok(Decimal::ZERO)
+//     }
+// }
 
 pub async fn create_account(
     state: &AppState,
@@ -96,6 +194,11 @@ pub async fn my_account(
     )
     .map_err(|_| AppError::Unauthorized("Invalid or expired session".to_string()))?;
 
+    let user_account_number = token_data.claims.account_number;
+
+    let balance = compute_for_balance(state, &user_account_number).await?;
+    record_balance(state, &user_account_number, &balance).await?;
+    
     let record = sqlx::query_as::<_, UserWithAccountRow>(
         r#"
         SELECT 
@@ -144,4 +247,86 @@ pub async fn my_account(
     };
 
     Ok(MyAccountResponse { user_account })
+}
+
+pub async fn deposit(
+    state: &AppState,
+    token: &str,
+    amount: Decimal,
+    account_number: &str,
+) -> Result<DepositResponse, AppError> {
+    
+    let token_data = decode::<JwtClaims>(
+        token,
+        &DecodingKey::from_secret(jwt_secret().as_ref()),
+        &Validation::default(),
+    )
+    .map_err(|_| AppError::Unauthorized("Invalid or expired session".to_string()))?;
+    
+    let user_id = token_data.claims.sub as i32;
+    
+    check_if_account_active(state, &user_id).await?;
+    check_amount_being_transferred(state, &amount).await?;
+
+    // to follow: paymongo integration for actual monetary transfer to central bank
+
+    // create transaction record
+    let transaction = transactions_services::record_transaction(
+        state,
+        token,
+        amount,
+        None,
+        Some(account_number.to_string()),
+        "deposit".to_string(),
+        "completed".to_string(),
+        chrono::Utc::now().naive_utc(),
+    )
+    .await?;
+
+    // todo!("Deposit functionality not implemented")
+    Ok(DepositResponse {
+        message: "Deposit successful".to_string(),
+        transaction: Some(transaction),
+    })
+}
+
+pub async fn withdraw(
+    state: &AppState,
+    token: &str,
+    amount: Decimal,
+    account_number: &str,
+) -> Result<WithdrawalResponse, AppError> {
+    
+    let token_data = decode::<JwtClaims>(
+        token,
+        &DecodingKey::from_secret(jwt_secret().as_ref()),
+        &Validation::default(),
+    )
+    .map_err(|_| AppError::Unauthorized("Invalid or expired session".to_string()))?;
+    
+    let user_id = token_data.claims.sub as i32;
+    
+    check_if_account_active(state, &user_id).await?;
+    check_amount_being_transferred(state, &amount).await?;
+
+    // to follow: paymongo integration for actual monetary transfer to central bank
+
+    // create transaction record
+    let transaction = transactions_services::record_transaction(
+        state,
+        token,
+        amount,
+        Some(account_number.to_string()),
+        None,
+        "withdrawal".to_string(),
+        "completed".to_string(),
+        chrono::Utc::now().naive_utc(),
+    )
+    .await?;
+
+    // todo!("Deposit functionality not implemented")
+    Ok(WithdrawalResponse {
+        message: "Withdrawal successful".to_string(),
+        transaction: Some(transaction),
+    })
 }

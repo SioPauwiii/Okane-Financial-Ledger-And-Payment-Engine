@@ -5,6 +5,7 @@ use crate::{
     responses::auth_responses::{RegisterResponse, LoginResponse},
     responses::jwt_responses::JwtClaims,
     models::users_models::User,
+    models::accounts_models::Account,
     services::cookie_services,
     services::accounts_services,
 };
@@ -83,10 +84,12 @@ pub async fn hash_password(
 // JWT generation
 pub async fn generate_jwt(
     user: &User,
+    account: &Account,
 ) -> Result<String, AppError> {
     let claims = JwtClaims {
         sub: user.id,
         email: user.email.clone(),
+        account_number: account.account_number.clone(),
         user_type: user.user_type.clone(),
         exp: (chrono::Utc::now().timestamp() + 604800) as usize,
     };
@@ -137,7 +140,7 @@ pub async fn register(
     // create user account
     let account = accounts_services::create_account(state, &payload.email, "savings").await?;
 
-    let access_token = generate_jwt(&user).await?;
+    let access_token = generate_jwt(&user, &account).await?;
 
     Ok(RegisterResponse {
         message: "User registered successfully".to_string(),
@@ -163,7 +166,14 @@ pub async fn login(
         return Err(AppError::Unauthorized("Invalid email or password".to_string()));
     }
 
-    let access_token = generate_jwt(&user).await?;
+    let account = sqlx::query_as::<_, Account>(
+        "SELECT * FROM accounts WHERE user_id = $1"
+    )
+    .bind(user.id)
+    .fetch_one(&state.db)
+    .await?;
+
+    let access_token = generate_jwt(&user, &account).await?;
     
     Ok(LoginResponse { 
         message: "Login successful".to_string(),

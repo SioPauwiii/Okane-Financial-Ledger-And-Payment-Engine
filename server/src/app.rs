@@ -3,6 +3,7 @@ use crate::state::AppState;
 use crate::routes::auth_routes::auth_routes;
 use crate::routes::users_routes::users_routes;
 use crate::routes::accounts_routes::accounts_routes;
+use crate::routes::transactions_routes::transactions_routes;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
@@ -30,6 +31,7 @@ pub fn build_server(state: AppState) -> Router {
         .nest("/api/auth", auth_routes())
         .nest("/api/user", users_routes())
         .nest("/api/account", accounts_routes())
+        .nest("/api/transaction", transactions_routes())
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)

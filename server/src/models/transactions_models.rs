@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Transaction {
-    pub id: i64,
-    pub from_account_id: i64,
-    pub to_account_id: i64,
+    pub id: i32,
+    pub from_account_number: Option<String>,
+    pub to_account_number: Option<String>,
     pub amount_transferred: Decimal, // Using String to represent numeric values to avoid precision issues
     pub transaction_type: String, // transfer, deposit, withdrawal
     pub status: String, // pending, completed, failed

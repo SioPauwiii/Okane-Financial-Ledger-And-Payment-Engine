@@ -1,6 +1,7 @@
 use crate::{
     models::users_models::User, 
-    models::accounts_models::Account
+    models::accounts_models::Account,
+    models::transactions_models::Transaction,
 };
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -41,3 +42,17 @@ pub struct UserWithAccountRow {
     pub user: User,
     pub account: Option<sqlx::types::Json<Account>>,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct DepositResponse {
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction: Option<Transaction>,
+}   
+
+#[derive(Serialize, Deserialize)]
+pub struct WithdrawalResponse {
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction: Option<Transaction>,
+}   

@@ -26,7 +26,15 @@ async fn main() -> anyhow::Result<()> {
         .max_connections(30)
         .connect(&database_url)
         .await;
-    let state = state::AppState { db: db_pool.expect("Failed to connect to the database") };
+
+    let stripe_secret_key = std::env::var("STRIPE_SECRET_KEY").expect("STRIPE_SECRET_KEY must be set");
+    let stripe_client = stripe::Client::new(&stripe_secret_key);
+
+    let state = state::AppState {
+        db: db_pool.expect("Failed to connect to database"),
+        stripe_client,
+    };
+
     let app = app::build_server(state);
     let addr: SocketAddr = std::env::var("ADDR").unwrap_or_else(|_| "127.0.0.1:3000".into()).parse()?;
     let listener = TcpListener::bind(&addr).await?;

@@ -4,8 +4,9 @@ use crate::{
     models::accounts_models::Account,
     responses::account_responses::{MyAccountResponse, UserWithAccountRow},
     responses::jwt_responses::JwtClaims,
-    responses::account_responses::{DepositResponse, WithdrawalResponse},
+    responses::account_responses::{DepositResponse, WithdrawalResponse, TransferResponse},
     services::transactions_services,
+    services::stripe_services,
 
 };
 use jsonwebtoken::{decode, DecodingKey, Validation};
@@ -249,7 +250,7 @@ pub async fn my_account(
     Ok(MyAccountResponse { user_account })
 }
 
-pub async fn deposit(
+pub async fn start_deposit(
     state: &AppState,
     token: &str,
     amount: Decimal,
@@ -262,13 +263,19 @@ pub async fn deposit(
         &Validation::default(),
     )
     .map_err(|_| AppError::Unauthorized("Invalid or expired session".to_string()))?;
-    
     let user_id = token_data.claims.sub as i32;
     
     check_if_account_active(state, &user_id).await?;
     check_amount_being_transferred(state, &amount).await?;
 
-    // to follow: paymongo integration for actual monetary transfer to central bank
+    // Call Stripe to create a hosted checkout page URL
+    let checkout_session = stripe_services::create_checkout_session(
+        &state.stripe_client, // pass by reference, not by value
+        amount,
+        None,
+        Some(account_number.to_string()),
+    )
+    .await?;
 
     // create transaction record
     let transaction = transactions_services::record_transaction(
@@ -278,16 +285,38 @@ pub async fn deposit(
         None,
         Some(account_number.to_string()),
         "deposit".to_string(),
+        "pending".to_string(),
+        chrono::Utc::now().naive_utc(),
+    )
+    .await?;
+
+    Ok(DepositResponse {
+        message: "Deposit initiated. Complete payment at the provided URL.".to_string(),
+        checkout_url: checkout_session.url, // The Stripe-hosted payment page URL
+        transaction: Some(transaction),
+    })
+}
+
+pub async fn complete_deposit(
+    state: &AppState,
+    account_number: &str,
+    amount: Decimal,
+) -> Result<(), AppError> {
+    // This will be called by the Stripe webhook handler
+    // when Stripe confirms that the payment actually succeeded
+    let transaction = transactions_services::record_transaction(
+        state,
+        "", // webhook has no user JWT token, so we pass empty
+        amount,
+        None,
+        Some(account_number.to_string()),
+        "deposit".to_string(),
         "completed".to_string(),
         chrono::Utc::now().naive_utc(),
     )
     .await?;
 
-    // todo!("Deposit functionality not implemented")
-    Ok(DepositResponse {
-        message: "Deposit successful".to_string(),
-        transaction: Some(transaction),
-    })
+    Ok(())
 }
 
 pub async fn withdraw(
@@ -327,6 +356,48 @@ pub async fn withdraw(
     // todo!("Deposit functionality not implemented")
     Ok(WithdrawalResponse {
         message: "Withdrawal successful".to_string(),
+        transaction: Some(transaction),
+    })
+}
+
+pub async fn transfer(
+    state: &AppState,
+    token: &str,
+    amount: Decimal,
+    target_account_number: &str,
+) -> Result<TransferResponse, AppError> {
+    
+    let token_data = decode::<JwtClaims>(
+        token,
+        &DecodingKey::from_secret(jwt_secret().as_ref()),
+        &Validation::default(),
+    )
+    .map_err(|_| AppError::Unauthorized("Invalid or expired session".to_string()))?;
+    
+    let user_id = token_data.claims.sub as i32;
+    let user_account_number = token_data.claims.account_number;
+    
+    check_if_account_active(state, &user_id).await?;
+    check_amount_being_transferred(state, &amount).await?;
+
+    // to follow: paymongo integration for actual monetary transfer to central bank
+
+    // create transaction record
+    let transaction = transactions_services::record_transaction(
+        state,
+        token,
+        amount,
+        Some(user_account_number.to_string()),
+        Some(target_account_number.to_string()),
+        "transfer".to_string(),
+        "completed".to_string(),
+        chrono::Utc::now().naive_utc(),
+    )
+    .await?;
+
+    // todo!("Deposit functionality not implemented")
+    Ok(TransferResponse {
+        message: "Transfer successful".to_string(),
         transaction: Some(transaction),
     })
 }

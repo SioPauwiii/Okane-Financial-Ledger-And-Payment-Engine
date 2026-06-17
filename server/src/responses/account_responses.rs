@@ -47,11 +47,20 @@ pub struct UserWithAccountRow {
 pub struct DepositResponse {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub checkout_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction: Option<Transaction>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct WithdrawalResponse {
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub transaction: Option<Transaction>,
 }   
 
 #[derive(Serialize, Deserialize)]
-pub struct WithdrawalResponse {
+pub struct TransferResponse {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transaction: Option<Transaction>,

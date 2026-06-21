@@ -4,8 +4,9 @@ use crate::{
     models::accounts_models::Account,
     responses::account_responses::{MyAccountResponse, UserWithAccountRow},
     responses::jwt_responses::JwtClaims,
-    responses::account_responses::{DepositResponse, WithdrawalResponse},
+    responses::account_responses::{DepositResponse, WithdrawalResponse, TransferResponse},
     services::transactions_services,
+    services::paymongo_services,
 
 };
 use jsonwebtoken::{decode, DecodingKey, Validation};
@@ -86,7 +87,7 @@ pub async fn compute_for_balance(
     account_number: &String,
 ) -> Result<Decimal, AppError>{
     let transactions = sqlx::query!(
-        "SELECT * FROM transactions WHERE from_account_number = $1 OR to_account_number = $1",
+        "SELECT * FROM transactions WHERE (from_account_number = $1 OR to_account_number = $1) AND status = 'completed'",
         account_number,
     )
     .fetch_all(&state.db)
@@ -249,7 +250,7 @@ pub async fn my_account(
     Ok(MyAccountResponse { user_account })
 }
 
-pub async fn deposit(
+pub async fn start_deposit(
     state: &AppState,
     token: &str,
     amount: Decimal,
@@ -262,15 +263,13 @@ pub async fn deposit(
         &Validation::default(),
     )
     .map_err(|_| AppError::Unauthorized("Invalid or expired session".to_string()))?;
-    
     let user_id = token_data.claims.sub as i32;
     
     check_if_account_active(state, &user_id).await?;
     check_amount_being_transferred(state, &amount).await?;
 
-    // to follow: paymongo integration for actual monetary transfer to central bank
-
-    // create transaction record
+    // Create the pending transaction first so we have its UUID to embed in the checkout session.
+    // The webhook will read that UUID back and use it when recording the completed record.
     let transaction = transactions_services::record_transaction(
         state,
         token,
@@ -278,16 +277,50 @@ pub async fn deposit(
         None,
         Some(account_number.to_string()),
         "deposit".to_string(),
-        "completed".to_string(),
+        "pending".to_string(),
         chrono::Utc::now().naive_utc(),
+        None, // let the DB generate a fresh UUID
     )
     .await?;
 
-    // todo!("Deposit functionality not implemented")
+    let checkout_url = paymongo_services::create_checkout_session(
+        &state.http_client,
+        &state.paymongo_secret_key,
+        amount,
+        account_number,
+        &transaction.transaction_uuid.to_string(), // embed UUID so webhook can retrieve it
+    )
+    .await?;
+
     Ok(DepositResponse {
-        message: "Deposit successful".to_string(),
+        message: "Deposit initiated. Complete payment at the provided URL.".to_string(),
+        checkout_url: Some(checkout_url),
         transaction: Some(transaction),
     })
+}
+
+pub async fn complete_deposit(
+    state: &AppState,
+    account_number: &str,
+    amount: Decimal,
+    transaction_uuid: uuid::Uuid, // UUID of the original pending transaction
+) -> Result<(), AppError> {
+    // Called by the PayMongo webhook after payment is confirmed.
+    // We reuse the same UUID as the pending row so both rows are linked.
+    let _transaction = transactions_services::record_transaction(
+        state,
+        "", // webhook has no user JWT token, so we pass empty
+        amount,
+        None,
+        Some(account_number.to_string()),
+        "deposit".to_string(),
+        "completed".to_string(),
+        chrono::Utc::now().naive_utc(),
+        Some(transaction_uuid), // reuse the pending transaction's UUID
+    )
+    .await?;
+
+    Ok(())
 }
 
 pub async fn withdraw(
@@ -311,7 +344,7 @@ pub async fn withdraw(
 
     // to follow: paymongo integration for actual monetary transfer to central bank
 
-    // create transaction record
+    // create transaction record (standalone — no pending counterpart)
     let transaction = transactions_services::record_transaction(
         state,
         token,
@@ -321,12 +354,56 @@ pub async fn withdraw(
         "withdrawal".to_string(),
         "completed".to_string(),
         chrono::Utc::now().naive_utc(),
+        None, // no pending counterpart, DB generates a fresh UUID
     )
     .await?;
 
     // todo!("Deposit functionality not implemented")
     Ok(WithdrawalResponse {
         message: "Withdrawal successful".to_string(),
+        transaction: Some(transaction),
+    })
+}
+
+pub async fn transfer(
+    state: &AppState,
+    token: &str,
+    amount: Decimal,
+    target_account_number: &str,
+) -> Result<TransferResponse, AppError> {
+    
+    let token_data = decode::<JwtClaims>(
+        token,
+        &DecodingKey::from_secret(jwt_secret().as_ref()),
+        &Validation::default(),
+    )
+    .map_err(|_| AppError::Unauthorized("Invalid or expired session".to_string()))?;
+    
+    let user_id = token_data.claims.sub as i32;
+    let user_account_number = token_data.claims.account_number;
+    
+    check_if_account_active(state, &user_id).await?;
+    check_amount_being_transferred(state, &amount).await?;
+
+    // to follow: paymongo integration for actual monetary transfer to central bank
+
+    // create transaction record (standalone — no pending counterpart)
+    let transaction = transactions_services::record_transaction(
+        state,
+        token,
+        amount,
+        Some(user_account_number.to_string()),
+        Some(target_account_number.to_string()),
+        "transfer".to_string(),
+        "completed".to_string(),
+        chrono::Utc::now().naive_utc(),
+        None, // no pending counterpart, DB generates a fresh UUID
+    )
+    .await?;
+
+    // todo!("Deposit functionality not implemented")
+    Ok(TransferResponse {
+        message: "Transfer successful".to_string(),
         transaction: Some(transaction),
     })
 }

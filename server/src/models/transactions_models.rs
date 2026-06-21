@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Transaction {
     pub id: i32,
+    pub transaction_uuid: String, // shared UUID (stored as text) linking a pending + its completed counterpart
     pub from_account_number: Option<String>,
     pub to_account_number: Option<String>,
     pub amount_transferred: Decimal, // Using String to represent numeric values to avoid precision issues

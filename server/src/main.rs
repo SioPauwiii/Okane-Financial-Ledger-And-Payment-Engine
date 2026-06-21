@@ -26,7 +26,18 @@ async fn main() -> anyhow::Result<()> {
         .max_connections(30)
         .connect(&database_url)
         .await;
-    let state = state::AppState { db: db_pool.expect("Failed to connect to the database") };
+
+    let http_client=reqwest::Client::new();
+    let paymongo_secret_key = std::env::var("PAYMONGO_SECRET_KEY").expect("PAYMONGO_SECRET_KEY must be set");
+    let paymongo_webhook_secret = std::env::var("PAYMONGO_WEBHOOK_SECRET").expect("PAYMONGO_WEBHOOK_SECRET must be set");
+
+    let state = state::AppState {
+        db: db_pool.expect("Failed to connect to database"),
+        http_client,
+        paymongo_secret_key,
+        paymongo_webhook_secret,
+    };
+
     let app = app::build_server(state);
     let addr: SocketAddr = std::env::var("ADDR").unwrap_or_else(|_| "127.0.0.1:3000".into()).parse()?;
     let listener = TcpListener::bind(&addr).await?;

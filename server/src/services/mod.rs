@@ -3,4 +3,4 @@ pub mod users_services;
 pub mod transactions_services;
 pub mod auth_services;
 pub mod cookie_services;
-pub mod stripe_services;
+pub mod paymongo_services;

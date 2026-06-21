@@ -8,4 +8,5 @@ pub fn accounts_routes() -> Router<AppState> {
 		.route("/deposit", post(accounts_handlers::start_deposit))
 		.route("/withdraw", post(accounts_handlers::withdraw))
 		.route("/transfer", post(accounts_handlers::transfer))
+		.route("/webhook/paymongo", post(accounts_handlers::paymongo_webhook))
 }

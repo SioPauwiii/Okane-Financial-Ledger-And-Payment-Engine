@@ -6,7 +6,7 @@ use crate::{
     responses::jwt_responses::JwtClaims,
     responses::account_responses::{DepositResponse, WithdrawalResponse, TransferResponse},
     services::transactions_services,
-    services::stripe_services,
+    services::paymongo_services,
 
 };
 use jsonwebtoken::{decode, DecodingKey, Validation};
@@ -87,7 +87,7 @@ pub async fn compute_for_balance(
     account_number: &String,
 ) -> Result<Decimal, AppError>{
     let transactions = sqlx::query!(
-        "SELECT * FROM transactions WHERE from_account_number = $1 OR to_account_number = $1",
+        "SELECT * FROM transactions WHERE (from_account_number = $1 OR to_account_number = $1) AND status = 'completed'",
         account_number,
     )
     .fetch_all(&state.db)
@@ -268,16 +268,8 @@ pub async fn start_deposit(
     check_if_account_active(state, &user_id).await?;
     check_amount_being_transferred(state, &amount).await?;
 
-    // Call Stripe to create a hosted checkout page URL
-    let checkout_session = stripe_services::create_checkout_session(
-        &state.stripe_client, // pass by reference, not by value
-        amount,
-        None,
-        Some(account_number.to_string()),
-    )
-    .await?;
-
-    // create transaction record
+    // Create the pending transaction first so we have its UUID to embed in the checkout session.
+    // The webhook will read that UUID back and use it when recording the completed record.
     let transaction = transactions_services::record_transaction(
         state,
         token,
@@ -287,12 +279,22 @@ pub async fn start_deposit(
         "deposit".to_string(),
         "pending".to_string(),
         chrono::Utc::now().naive_utc(),
+        None, // let the DB generate a fresh UUID
+    )
+    .await?;
+
+    let checkout_url = paymongo_services::create_checkout_session(
+        &state.http_client,
+        &state.paymongo_secret_key,
+        amount,
+        account_number,
+        &transaction.transaction_uuid.to_string(), // embed UUID so webhook can retrieve it
     )
     .await?;
 
     Ok(DepositResponse {
         message: "Deposit initiated. Complete payment at the provided URL.".to_string(),
-        checkout_url: checkout_session.url, // The Stripe-hosted payment page URL
+        checkout_url: Some(checkout_url),
         transaction: Some(transaction),
     })
 }
@@ -301,10 +303,11 @@ pub async fn complete_deposit(
     state: &AppState,
     account_number: &str,
     amount: Decimal,
+    transaction_uuid: uuid::Uuid, // UUID of the original pending transaction
 ) -> Result<(), AppError> {
-    // This will be called by the Stripe webhook handler
-    // when Stripe confirms that the payment actually succeeded
-    let transaction = transactions_services::record_transaction(
+    // Called by the PayMongo webhook after payment is confirmed.
+    // We reuse the same UUID as the pending row so both rows are linked.
+    let _transaction = transactions_services::record_transaction(
         state,
         "", // webhook has no user JWT token, so we pass empty
         amount,
@@ -313,6 +316,7 @@ pub async fn complete_deposit(
         "deposit".to_string(),
         "completed".to_string(),
         chrono::Utc::now().naive_utc(),
+        Some(transaction_uuid), // reuse the pending transaction's UUID
     )
     .await?;
 
@@ -340,7 +344,7 @@ pub async fn withdraw(
 
     // to follow: paymongo integration for actual monetary transfer to central bank
 
-    // create transaction record
+    // create transaction record (standalone — no pending counterpart)
     let transaction = transactions_services::record_transaction(
         state,
         token,
@@ -350,6 +354,7 @@ pub async fn withdraw(
         "withdrawal".to_string(),
         "completed".to_string(),
         chrono::Utc::now().naive_utc(),
+        None, // no pending counterpart, DB generates a fresh UUID
     )
     .await?;
 
@@ -382,7 +387,7 @@ pub async fn transfer(
 
     // to follow: paymongo integration for actual monetary transfer to central bank
 
-    // create transaction record
+    // create transaction record (standalone — no pending counterpart)
     let transaction = transactions_services::record_transaction(
         state,
         token,
@@ -392,6 +397,7 @@ pub async fn transfer(
         "transfer".to_string(),
         "completed".to_string(),
         chrono::Utc::now().naive_utc(),
+        None, // no pending counterpart, DB generates a fresh UUID
     )
     .await?;
 

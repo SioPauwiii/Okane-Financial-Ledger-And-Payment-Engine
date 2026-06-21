@@ -27,12 +27,15 @@ async fn main() -> anyhow::Result<()> {
         .connect(&database_url)
         .await;
 
-    let stripe_secret_key = std::env::var("STRIPE_SECRET_KEY").expect("STRIPE_SECRET_KEY must be set");
-    let stripe_client = stripe::Client::new(&stripe_secret_key);
+    let http_client=reqwest::Client::new();
+    let paymongo_secret_key = std::env::var("PAYMONGO_SECRET_KEY").expect("PAYMONGO_SECRET_KEY must be set");
+    let paymongo_webhook_secret = std::env::var("PAYMONGO_WEBHOOK_SECRET").expect("PAYMONGO_WEBHOOK_SECRET must be set");
 
     let state = state::AppState {
         db: db_pool.expect("Failed to connect to database"),
-        stripe_client,
+        http_client,
+        paymongo_secret_key,
+        paymongo_webhook_secret,
     };
 
     let app = app::build_server(state);

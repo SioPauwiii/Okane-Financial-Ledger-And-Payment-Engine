@@ -7,6 +7,7 @@ use crate::{
 use rust_decimal::Decimal;
 use chrono::NaiveDateTime;
 use jsonwebtoken::{decode, DecodingKey, Validation};
+use uuid::Uuid;
 
 fn jwt_secret() -> String {
     std::env::var("JWT_SECRET").unwrap_or_else(|_| "secret".into())
@@ -21,6 +22,9 @@ pub async fn record_transaction(
     transaction_type: String,
     status: String,
     created_at: NaiveDateTime,
+    // Pass `None` when creating the initial pending record (DB generates a new UUID).
+    // Pass `Some(uuid)` when recording the completed/failed counterpart so both rows share the same UUID.
+    transaction_uuid: Option<Uuid>,
 ) -> Result<Transaction, AppError> {
     
     let transaction = sqlx::query_as!(
@@ -32,11 +36,13 @@ pub async fn record_transaction(
             to_account_number,
             transaction_type,
             status,
-            created_at
+            created_at,
+            transaction_uuid
         )
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, gen_random_uuid()))
         RETURNING 
             id,
+            transaction_uuid::TEXT as "transaction_uuid!",
             amount_transferred as "amount_transferred!",
             from_account_number,
             to_account_number,
@@ -50,6 +56,7 @@ pub async fn record_transaction(
         transaction_type,
         status,
         created_at,
+        transaction_uuid,
     )
     .fetch_one(&state.db)
     .await?;
@@ -72,11 +79,22 @@ pub async fn my_transactions(
 
     let transactions = sqlx::query_as!(
         Transaction,
-        "SELECT * FROM transactions WHERE from_account_number = $1 OR to_account_number = $1 ORDER BY created_at DESC",
+        r#"SELECT 
+            id,
+            transaction_uuid::TEXT as "transaction_uuid!",
+            amount_transferred as "amount_transferred!",
+            from_account_number,
+            to_account_number,
+            transaction_type,
+            status,
+            created_at
+        FROM transactions 
+        WHERE from_account_number = $1 OR to_account_number = $1 
+        ORDER BY created_at DESC"#,
         user_account_number,
     )
     .fetch_all(&state.db)
     .await?;
     
     Ok(transactions)
-}
+}

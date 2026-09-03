@@ -260,21 +260,7 @@ Okane implements a unified error handling architecture that categorizes failures
 
 ---
 
-## 🚀 Environment Configuration & Local Setup
-
-### Environment Variables Template
-
-Create a `.env` configuration file in the project root:
-
-```env
-DATABASE_URL=postgres://<username>:<password>@<host>:<port>/<database_name>
-JWT_SECRET=<secure_random_jwt_signing_key>
-PAYMONGO_SECRET_KEY=<payment_gateway_api_key>
-PAYMONGO_WEBHOOK_SECRET=<payment_gateway_webhook_signing_secret>
-FRONTEND_ORIGIN=http://localhost:8081
-ADDR=127.0.0.1:3000
-COOKIE_SECURE=false
-```
+## 🚀 Local Setup
 
 ### Installation Steps
 

@@ -5,391 +5,278 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-blue.svg?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![SQLx](https://img.shields.io/badge/SQLx-0.9.0-lightgrey.svg?style=flat-square)](https://github.com/launchbadge/sqlx)
 [![Tokio](https://img.shields.io/badge/Tokio-1.52.3-purple.svg?style=flat-square)](https://tokio.rs/)
-[![Security](https://img.shields.io/badge/Security-Argon2--id_%7C_HMAC--SHA256-green.svg?style=flat-square)](#security-architecture)
+[![Security](https://img.shields.io/badge/Security-Argon2id_%7C_HMAC--SHA256-green.svg?style=flat-square)](#security-architecture)
 
-**Okane** is a enterprise-grade, asynchronous financial backend service and immutable ledger built with **Rust**, **Axum**, and **PostgreSQL**. Designed for high throughput, strict security, and zero floating-point rounding errors, Okane powers secure user account management, internal peer-to-peer fund transfers, and real-time e-wallet / card deposits via integration with the **PayMongo API v2**.
+**Okane** is an enterprise-grade, asynchronous financial backend engine and transaction ledger built with **Rust**, **Axum**, and **PostgreSQL**. Engineered for high throughput, memory safety, and fixed-precision financial arithmetic, Okane powers secure account operations, internal peer-to-peer transfers, and asynchronous e-wallet/card deposits via payment gateway integration.
 
 ---
 
 ## 📌 Executive Summary
 
-Modern financial systems demand absolute precision, strict cryptographic validation, and memory safety without sacrificing throughput. Okane is engineered from the ground up to solve critical financial engine challenges:
+Modern financial backends require absolute data integrity, strict cryptographic validation, and resilient session management. Okane is designed to address core financial systems challenges:
 
-- **Zero-Loss Financial Math**: Utilizes fixed-precision decimal arithmetic (`rust_decimal` mapped to PostgreSQL `NUMERIC(30, 2)`), completely eliminating IEEE 754 floating-point inaccuracies.
-- **Double-Entry Dynamic Balance Auditing**: Account balances are dynamically computed from an immutable ledger of completed transactions, ensuring tamper-evident balance state verification.
-- **PayMongo Payment Gateway Integration**: Native integration with PayMongo Checkout Sessions (GCash, Maya, Credit/Debit Cards) featuring asynchronous, webhook-driven transaction settlement.
-- **Cryptographic Webhook Verification**: Protects payment settlement endpoints against forgery using HMAC-SHA256 signature verification with constant-time string comparison.
-- **Stateless & Secure Session Management**: Implements Argon2 password hashing and HTTP-Only, SameSite, type-safe JWT cookies for secure cross-origin frontend communication.
+- **Fixed-Precision Financial Math**: Implements fixed-point decimal arithmetic to eliminate IEEE 754 floating-point rounding errors during transaction processing.
+- **Double-Entry Dynamic Balance Auditing**: Computes account balances dynamically from an immutable transaction history, ensuring auditable and tamper-evident state tracking.
+- **Payment Gateway Integration**: Integrates with third-party checkout API services (supporting e-wallets and card payments) with asynchronous, webhook-driven settlement.
+- **Cryptographic Webhook Validation**: Enforces HMAC-SHA256 signature verification with constant-time comparison to protect payment settlement endpoints against spoofing.
+- **Stateless & Secure Session Security**: Employs Argon2id password hashing and HTTP-Only, SameSite cookie-based session management for secure client interaction.
 
 ---
 
 ## 🏗️ System Architecture
 
-Okane follows a clean, modular, layered architecture adhering to the **Separation of Concerns (SoC)** principle.
+Okane follows a clean, modular, multi-layered architecture adhering to the **Separation of Concerns (SoC)** principle.
 
 ```
                     ┌────────────────────────────────────────┐
-                    │          HTTP Client / Web App         │
+                    │          Client Application            │
                     └───────────────────┬────────────────────┘
-                                        │ (REST / HTTPS / Cookies)
+                                        │ (HTTPS / Secure Cookies)
                                         ▼
  ┌────────────────────────────────────────────────────────────────────────────────────┐
- │  Axum Router Layer (src/app.rs & src/routes/)                                      │
- │  ├── /api/auth          (Registration, Authentication)                             │
- │  ├── /api/user          (Profile Retrieval)                                        │
- │  ├── /api/account       (Balances, Deposits, Withdrawals, Transfers, Webhooks)    │
- │  └── /api/transaction   (Ledger History)                                           │
+ │  API Routing & Dispatcher Layer                                                    │
+ │  ├── Authentication & Identity Routes                                              │
+ │  ├── User Profile Routes                                                           │
+ │  ├── Financial Account & Webhook Routes                                            │
+ │  └── Transaction Ledger Routes                                                     │
  └──────────────────────────────────────┬─────────────────────────────────────────────┘
                                         │
                                         ▼
  ┌────────────────────────────────────────────────────────────────────────────────────┐
- │  Handlers Layer (src/handlers/)                                                    │
- │  ├── Extractors: State, CookieJar, Headers, Bytes, Json<T>                        │
- │  └── Response Builders: Status Codes, JSON DTOs, HTTP Error Mapping                │
+ │  HTTP Handlers & Middleware Layer                                                  │
+ │  ├── Request Extraction & Input Validation                                         │
+ │  └── Security Context, CORS & Tracing Middleware                                  │
  └──────────────────────────────────────┬─────────────────────────────────────────────┘
                                         │
                                         ▼
  ┌────────────────────────────────────────────────────────────────────────────────────┐
- │  Services Layer (src/services/)                                                    │
- │  ├── auth_services       (Argon2 Hashing, JWT Claim Generation)                    │
- │  ├── accounts_services   (Ledger Balance Calculation, Deposit/Transfer Workflows)  │
- │  ├── paymongo_services   (Checkout API, HMAC-SHA256 Webhook Verification)          │
- │  └── transactions_services (Immutable Record Creation, Audit Logs)                  │
+ │  Domain Services Layer                                                             │
+ │  ├── Identity & Credential Service                                                 │
+ │  ├── Ledger & Balance Calculation Service                                          │
+ │  ├── External Payment Gateway Service                                              │
+ │  └── Audit Log & Transaction Service                                               │
  └───────────────────┬────────────────────────────────────────┬───────────────────────┘
                      │                                        │
                      ▼                                        ▼
  ┌──────────────────────────────────────┐  ┌──────────────────────────────────────────┐
- │  PostgreSQL Database (SQLx Pool)     │  │  PayMongo API v2 Gateway                 │
- │  ├── users table                     │  │  ├── Checkout Sessions API               │
- │  ├── accounts table                  │  │  └── Asynchronous Payment Webhooks       │
- │  └── transactions table              │  └──────────────────────────────────────────┘
+ │  Relational Database (Connection Pool│  │  External Payment Gateway API            │
+ │  ├── User Identity Store             │  │  ├── Hosted Checkout Sessions            │
+ │  ├── Financial Accounts Store        │  │  └── Asynchronous Payment Webhooks       │
+ │  └── Immutable Transaction Ledger    │  └──────────────────────────────────────────┘
  └──────────────────────────────────────┘
 ```
 
-### Architectural Modules
+### Logical Component Architecture
 
-| Layer | Path | Responsibility |
-| :--- | :--- | :--- |
-| **Server Initialization** | `src/main.rs` | Environment loading, PostgreSQL connection pool (`PgPool`) setup, PayMongo credentials binding, Tokio TCP binding. |
-| **Router Configuration** | `src/app.rs` | HTTP router assembly, CORS middleware definition, route nesting (`/api/*`), HTTP request tracing. |
-| **Routes** | `src/routes/` | Declarative mapping of HTTP methods and endpoints to handler functions. |
-| **Handlers** | `src/handlers/` | Request extraction, HTTP validation, cookie parsing, header extraction, and HTTP status response mapping. |
-| **Domain Services** | `src/services/` | Core business logic, financial validation, external payment gateway HTTP client interactions, cryptographic operations. |
-| **Data Models** | `src/models/` | Type-safe Rust structs representing database rows, derived with `sqlx::FromRow` and `serde`. |
-| **DTO Requests/Responses**| `src/requests/`, `src/responses/` | Strictly typed payload definitions for request deserialization and response serialization. |
-| **Error Handling** | `src/errors.rs` | Centralized `AppError` enum implementing Axum's `IntoResponse` for uniform JSON error schemas. |
+| Architectural Layer | Core Responsibility |
+| :--- | :--- |
+| **Server & Connection Management** | Manages application lifecycle, environment loading, database connection pooling, and Tokio TCP listeners. |
+| **Routing & Middleware** | Assemblies API routes, configures CORS policies, handles request tracing, and enforces security middleware. |
+| **HTTP Handlers** | Extracts incoming payloads, validates inputs, handles cookie extraction, and maps domain responses to standard HTTP status codes. |
+| **Domain Services** | Implements core business rules, ledger calculations, cryptographic hashing/verification, and external gateway integration. |
+| **Data Access & Storage** | Executes type-safe relational database operations against persistent storage. |
+| **Error Handling** | Translates internal domain and database errors into standardized, secure HTTP JSON error responses. |
 
 ---
 
 ## 🔄 Data Flow & Payment Lifecycle
 
-### PayMongo Deposit & Webhook Settlement Flow
+### Asynchronous Deposit & Webhook Settlement Flow
 
-The deposit workflow bridges synchronous user requests with asynchronous payment gateway notifications to guarantee ledger integrity.
+The deposit lifecycle decouples payment initiation from settlement using signed webhook callbacks to maintain ledger consistency.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User
-    participant App as Okane Backend
-    participant DB as PostgreSQL DB
-    participant PM as PayMongo API
+    actor Client
+    participant App as Okane Backend Engine
+    participant DB as Relational Database
+    participant GW as Payment Gateway
 
-    User->>App: POST /api/account/deposit { amount, account_number } (with Auth Cookie)
-    App->>App: Validate JWT & Account Status
-    App->>DB: INSERT INTO transactions (type='deposit', status='pending', uuid=gen_random_uuid())
-    DB-->>App: Return pending Transaction (with transaction_uuid)
-    App->>PM: POST /v2/checkout_sessions (Amount in centavos, metadata: { account_number, transaction_uuid })
-    PM-->>App: Return checkout_url
-    App-->>User: 200 OK { checkout_url, transaction }
+    Client->>App: POST /api/account/deposit (Amount & Account Identifier)
+    App->>App: Validate Session & Account Status
+    App->>DB: Record Pending Transaction Entry
+    DB-->>App: Pending Transaction Acknowledged
+    App->>GW: Create Hosted Checkout Session
+    GW-->>App: Return Hosted Checkout URL
+    App-->>Client: Return Checkout URL & Pending Details
     
-    User->>PM: User opens checkout_url & pays via GCash / Maya / Card
-    PM->>App: POST /api/account/webhook/paymongo (Headers: paymongo-signature, Body: raw JSON)
+    Client->>GW: Client Completes Payment on Hosted Checkout Page
+    GW->>App: POST Webhook Callback (Signature Header & Event Payload)
     
-    App->>App: Verify HMAC-SHA256 signature against paymongo_webhook_secret
-    alt Signature Invalid
-        App-->>PM: 401 Unauthorized
-    else Signature Valid
-        App->>App: Extract metadata (account_number, transaction_uuid, amount_in_centavos)
-        App->>DB: INSERT INTO transactions (type='deposit', status='completed', transaction_uuid=uuid)
-        DB-->>App: Record created
-        App->>DB: UPDATE accounts balance (computed from completed transactions)
-        App-->>PM: 200 OK { received: true }
+    App->>App: Validate HMAC-SHA256 Webhook Signature
+    alt Signature Verification Failed
+        App-->>GW: 401 Unauthorized
+    else Signature Verified
+        App->>App: Parse Settlement Event & Metadata
+        App->>DB: Record Completed Transaction Entry
+        App->>DB: Recompute & Update Account Balance
+        App-->>GW: 200 OK (Event Acknowledged)
     end
 ```
 
 ---
 
-## 🗄️ Database Architecture & Schema
+## 🗄️ High-Level Data Model & Storage
 
-The system uses **PostgreSQL** managed via compile-time verified **SQLx** queries and raw SQL migration files (`/server/migrations`).
+The system utilizes a relational database structure designed for ACID-compliant ledger operations.
 
 ```mermaid
 erdiagram
-    USERS ||--o{ ACCOUNTS : "owns"
-    ACCOUNTS ||--o{ TRANSACTIONS : "source of (from_account)"
-    ACCOUNTS ||--o{ TRANSACTIONS : "destination of (to_account)"
+    USER_IDENTITY ||--o{ FINANCIAL_ACCOUNT : "owns"
+    FINANCIAL_ACCOUNT ||--o{ TRANSACTION_LEDGER : "source"
+    FINANCIAL_ACCOUNT ||--o{ TRANSACTION_LEDGER : "destination"
 
-    USERS {
-        BIGINT id PK
-        VARCHAR email UK
-        VARCHAR first_name
-        VARCHAR last_name
-        VARCHAR country
-        VARCHAR city
-        VARCHAR street
-        VARCHAR house_no
-        VARCHAR zip_code
-        VARCHAR contact_no
-        DATE birth_date
-        VARCHAR sex
-        VARCHAR nationality
-        VARCHAR password "Argon2 Hash"
-        VARCHAR user_type "customer | admin"
-        TIMESTAMP created_at
-        TIMESTAMP updated_at
+    USER_IDENTITY {
+        Identifier id
+        String email
+        String credentials
+        String role
+        Timestamp created_at
     }
 
-    ACCOUNTS {
-        INTEGER id PK
-        INTEGER user_id FK
-        VARCHAR account_number UK "10-digit random string"
-        VARCHAR account_type "savings | checking"
-        NUMERIC balance "30, 2"
-        VARCHAR currency "PHP"
-        VARCHAR status "active | frozen | closed"
-        TIMESTAMP created_at
-        TIMESTAMP updated_at
+    FINANCIAL_ACCOUNT {
+        Identifier id
+        Identifier user_id
+        String account_identifier
+        String account_type
+        Numeric balance
+        String status
+        Timestamp created_at
     }
 
-    TRANSACTIONS {
-        INTEGER id PK
-        UUID transaction_uuid "Shared UUID linking pending and completed entries"
-        VARCHAR from_account_number FK
-        VARCHAR to_account_number FK
-        NUMERIC amount_transferred "30, 2"
-        VARCHAR transaction_type "deposit | withdrawal | transfer"
-        VARCHAR status "pending | completed | failed"
-        TIMESTAMP created_at
+    TRANSACTION_LEDGER {
+        Identifier id
+        UUID correlation_id
+        String source_account
+        String destination_account
+        Numeric amount
+        String transaction_type
+        String status
+        Timestamp created_at
     }
 ```
 
-### Key Schema Optimizations
+### Data Integrity Principles
 
-1. **Foreign Key Cascade Constraints**: Deleting a user automatically purges linked account and transaction logs via `ON DELETE CASCADE`.
-2. **Precision Numeric Column**: `balance` and `amount_transferred` use `NUMERIC(30, 2)` to retain exact monetary precision without floating-point drift.
-3. **Transaction Pair Correlation**: The `transaction_uuid` column links initial `pending` deposit records with their corresponding `completed` webhook settlement entries.
+1. **Immutable Transaction History**: Transactions are written as append-only records. Financial balances are derived from completed transaction histories.
+2. **Numeric Precision**: Monetary values are stored using fixed-precision numeric types (`NUMERIC(30, 2)`) to eliminate floating-point drift.
+3. **Correlation Tracking**: Transaction lifecycle events share an immutable correlation identifier to link initial requests with asynchronous settlement events.
 
 ---
 
 ## 🔒 Security Architecture
 
-Okane incorporates multiple defense-in-depth security layers crucial for financial applications:
+Okane incorporates defense-in-depth security principles to protect identity, ledger data, and external integration points:
 
-### 1. Argon2id Password Hashing
-Password credentials are hashed using `argon2` (v0.5.3) with a cryptographically secure 16-byte B64 salt generated per user via `rand::random()`:
-```rust
-let salt = SaltString::encode_b64(&bytes).expect("failed to create salt");
-let hashed = Argon2::default().hash_password(password.as_bytes(), &salt)?.to_string();
-```
+### 1. Argon2id Credential Hashing
+User passwords are never stored in plain text. Credentials are hashed using the memory-hard **Argon2id** algorithm with unique, cryptographically random salt strings per user, defending against GPU-based cracking and rainbow table attacks.
 
 ### 2. Cryptographic Webhook Authentication (HMAC-SHA256)
-PayMongo webhook notifications are validated to prevent spoofed deposits. The backend extracts `t` (timestamp) and `te` (test/live signature) from `paymongo-signature` headers, reconstructs the signature payload `<timestamp>.<raw_body>`, and computes the expected HMAC-SHA256 signature using `hmac` and `sha2`:
-```rust
-let mut signed_payload = timestamp.into_bytes();
-signed_payload.push(b'.');
-signed_payload.extend_from_slice(raw_body);
+Incoming webhook events from payment providers are cryptographically authenticated before processing:
+- **Timestamped Payload Reconstruction**: Combines the request timestamp with the raw HTTP request body.
+- **HMAC Calculation**: Computes the expected digest using a shared secret and SHA-256 algorithm.
+- **Constant-Time Comparison**: Compares signatures using constant-time evaluation to prevent timing attacks.
 
-let mut mac = HmacSha256::new_from_slice(secret.as_bytes())?;
-mac.update(&signed_payload);
-let computed = hex::encode(mac.finalize().into_bytes());
-
-// Constant-time string comparison against header signature
-computed == te_signature
-```
-
-### 3. JWT Authentication & HTTP-Only Cookies
-Authentication sessions use JSON Web Tokens (`jsonwebtoken`) transmitted via HTTP-only, `SameSite=None` cookies (`axum-extra`), neutralizing client-side Cross-Site Scripting (XSS) token theft:
-
-| JWT Claim | Description |
-| :--- | :--- |
-| `sub` | User ID (`i64`) |
-| `email` | Registered User Email |
-| `account_number` | User's Primary Financial Account Number |
-| `user_type` | User Role (`customer`, `admin`) |
-| `exp` | Token Expiration Unix Timestamp (7-day duration) |
+### 3. Session Security & Cookie Protection
+Authentication sessions utilize signed JSON Web Tokens (JWT) delivered via **HTTP-Only, SameSite** cookies:
+- **XSS Mitigation**: Client-side JavaScript cannot access session tokens stored in HTTP-Only cookies.
+- **CSRF Mitigation**: Enforces strict origin validation and SameSite cookie attributes.
+- **Least-Privilege Token Claims**: Claims contain minimal scope required for route authorization and token expiration enforcement.
 
 ---
 
-## 📡 API Reference Specification
+## 📡 API Interface Overview
 
-Base URL: `http://localhost:3000/api`
+Base URL: `/api`
 
-### 1. Authentication Endpoints (`/api/auth`)
+### Endpoint Catalog
 
-#### `POST /api/auth/register`
-Registers a new user, hashes the password, automatically provisions a 10-digit savings account in `PHP`, and issues a JWT session token.
+| Group | Method | Endpoint | Description | Auth Required |
+| :--- | :--- | :--- | :--- | :---: |
+| **Auth** | `POST` | `/api/auth/register` | Registers a user and provisions an active account | No |
+| **Auth** | `POST` | `/api/auth/login` | Authenticates credentials and issues session cookie | No |
+| **User** | `GET` | `/api/user/me` | Fetches authenticated user profile | Yes |
+| **Account** | `GET` | `/api/account/my-account` | Fetches current account state & ledger balance | Yes |
+| **Account** | `POST` | `/api/account/deposit` | Initiates payment gateway checkout session | Yes |
+| **Account** | `POST` | `/api/account/transfer` | Executes peer-to-peer account transfer | Yes |
+| **Account** | `POST` | `/api/account/withdraw` | Records an account withdrawal entry | Yes |
+| **Account** | `POST` | `/api/account/webhook/paymongo` | Handles incoming payment gateway webhooks | Signature |
+| **Ledger** | `GET` | `/api/transaction/my-transactions` | Retrieves historical transaction audit log | Yes |
 
-- **Request Body**:
+### Sample Request & Response Schemas
+
+#### Deposit Request (`POST /api/account/deposit`)
 ```json
 {
-  "email": "user@example.com",
-  "first_name": "John",
-  "last_name": "Doe",
-  "country": "Philippines",
-  "city": "Manila",
-  "street": "Ayala Ave",
-  "house_no": "123",
-  "zip_code": "1200",
-  "contact_no": "+639171234567",
-  "birth_date": "1995-08-15",
-  "sex": "Male",
-  "nationality": "Filipino",
-  "password": "SecurePassword123!",
-  "confirm_password": "SecurePassword123!"
-}
-```
-- **Response (`200 OK`)**:
-```json
-{
-  "message": "User registered successfully",
-  "user": {
-    "id": 1,
-    "email": "user@example.com",
-    "first_name": "John",
-    "last_name": "Doe",
-    "user_type": "customer",
-    "created_at": "2026-09-03T12:00:00"
-  },
-  "account": {
-    "id": 1,
-    "account_number": "8472910482",
-    "account_type": "savings",
-    "currency": "PHP",
-    "balance": "0.00",
-    "status": "active"
-  },
-  "access_token": "eyJhbGciOiJIUzI1Ni..."
-}
-```
-
-#### `POST /api/auth/login`
-Authenticates user credentials against stored Argon2 hashes and returns an access token / sets HTTP cookie.
-
----
-
-### 2. User & Account Management (`/api/user` & `/api/account`)
-
-#### `GET /api/user/me`
-Retrieves authenticated user profile details. Requires valid `access_token` cookie.
-
-#### `GET /api/account/my-account`
-Calculates dynamic balance from completed ledger transactions, updates cached account balance, and returns account details with owner metadata.
-
-#### `POST /api/account/deposit`
-Initiates an e-wallet or credit card deposit via PayMongo Checkout Session V2.
-
-- **Request Body**:
-```json
-{
-  "account_number": "8472910482",
+  "account_number": "ACC-10029384",
   "amount": 500.00
 }
 ```
-- **Response (`200 OK`)**:
+
+#### Deposit Response (`200 OK`)
 ```json
 {
-  "message": "Deposit initiated. Complete payment at the provided URL.",
-  "checkout_url": "https://checkout.paymongo.com/cs_test_abc123...",
+  "message": "Deposit initiated successfully",
+  "checkout_url": "https://checkout.gateway.com/session/cs_live_sample",
   "transaction": {
-    "id": 42,
-    "transaction_uuid": "c39a8e94-3b1a-4d76-92a1-0f81d1912903",
-    "amount_transferred": "500.00",
-    "to_account_number": "8472910482",
-    "transaction_type": "deposit",
-    "status": "pending",
-    "created_at": "2026-09-03T12:05:00"
+    "transaction_uuid": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "amount": "500.00",
+    "type": "deposit",
+    "status": "pending"
   }
 }
 ```
 
-#### `POST /api/account/transfer`
-Executes an internal peer-to-peer balance transfer between two active accounts.
+---
 
-- **Request Body**:
+## ⚡ Error Handling & Resiliency
+
+Okane implements a unified error handling architecture that categorizes failures into predictable HTTP responses without leaking internal stack traces or database schema details to clients:
+
 ```json
 {
-  "target_account_number": "9102847361",
-  "amount": 150.00
+  "error": "Human-readable description of the error"
 }
 ```
 
-#### `POST /api/account/withdraw`
-Records an account withdrawal transaction.
-
-#### `POST /api/account/webhook/paymongo`
-Public webhook endpoint for receiving PayMongo payment status callbacks. Performs HMAC-SHA256 signature validation and converts pending transactions into completed ledger entries.
-
----
-
-### 3. Transaction History (`/api/transaction`)
-
-#### `GET /api/transaction/my-transactions`
-Retrieves the user's complete transaction audit trail (deposits, withdrawals, transfers) ordered by creation date descending.
+| HTTP Status | Category | Description |
+| :--- | :--- | :--- |
+| `400 Bad Request` | Validation Failure | Invalid input payload, non-positive financial amounts, or validation rule violations. |
+| `401 Unauthorized` | Security Failure | Missing/expired session cookie, invalid credentials, or failed webhook signature check. |
+| `404 Not Found` | Resource Missing | Non-existent user, account, or target entity. |
+| `500 Internal Error` | System Failure | Abstraction wrapper for downstream service timeouts or database pool exhaustion. |
 
 ---
 
-## ⚡ Error Handling Architecture
+## 💻 Technical Stack & Dependencies
 
-The backend centralizes error handling into an `AppError` enum implementing Axum's `IntoResponse` trait. Database errors from `SQLx` automatically convert into internal server errors:
+- **Language & Runtime**: Rust (2024 Edition) on `tokio` multi-threaded asynchronous runtime.
+- **Web Layer**: `axum` with `tower-http` middleware for CORS and request logging.
+- **Persistence & ORM**: `sqlx` providing compile-time type-checked SQL queries against PostgreSQL.
+- **Security & Crypto**: `argon2`, `jsonwebtoken`, `hmac`, `sha2`, `hex`, and `rand`.
+- **Financial Precision**: `rust_decimal` for accurate fixed-point monetary computations.
+- **HTTP Client**: `reqwest` for external payment gateway API communications.
 
-```rust
-pub enum AppError {
-    NotFound(String),
-    Unauthorized(String),
-    InternalServerError(String),
-    BadRequest(String),
-}
+---
+
+## 🚀 Environment Configuration & Local Setup
+
+### Environment Variables Template
+
+Create a `.env` configuration file in the project root:
+
+```env
+DATABASE_URL=postgres://<username>:<password>@<host>:<port>/<database_name>
+JWT_SECRET=<secure_random_jwt_signing_key>
+PAYMONGO_SECRET_KEY=<payment_gateway_api_key>
+PAYMONGO_WEBHOOK_SECRET=<payment_gateway_webhook_signing_secret>
+FRONTEND_ORIGIN=http://localhost:8081
+ADDR=127.0.0.1:3000
+COOKIE_SECURE=false
 ```
 
-### Standardized Error Format (`Json`)
-```json
-{
-  "error": "Detailed error message here"
-}
-```
-
-| HTTP Status | Trigger Condition |
-| :--- | :--- |
-| `400 Bad Request` | Invalid JSON, invalid transaction amount ($\le 0$), age validation failed ($<18$), mismatched passwords |
-| `401 Unauthorized` | Invalid/missing JWT cookie, invalid login credentials, invalid PayMongo webhook HMAC signature |
-| `404 Not Found` | Non-existent user, missing financial account, inactive account status |
-| `500 Internal Server Error` | Database connection failures, PayMongo API call timeout, serialization failures |
-
----
-
-## 💻 Tech Stack & System Requirements
-
-### Core Dependencies (`Cargo.toml`)
-
-- **Language / Runtime**: Rust (2024 edition) with `tokio` (v1.52.3) multi-threaded async executor
-- **Web Framework**: `axum` (v0.8.9) with `tower-http` CORS and HTTP tracing
-- **Database Connection**: `sqlx` (v0.9.0) with PostgreSQL native TLS, compile-time query checking, `rust_decimal`, and `uuid` support
-- **Cryptography & Security**: `argon2` (v0.5.3), `jsonwebtoken` (v10.4.0), `hmac` (v0.13.0), `sha2` (v0.11.0), `hex` (v0.4.3), `rand` (v0.10.1)
-- **Financial Precision Math**: `rust_decimal` (v1.42.1)
-- **External HTTP Client**: `reqwest` (v0.13.4) with JSON support
-
----
-
-## 🚀 Getting Started & Local Development
-
-### Prerequisites
-
-- **Rust Toolchain**: `rustc` 1.85+ and `cargo` installed ([rustup.rs](https://rustup.rs/))
-- **Database**: PostgreSQL 14+ database instance
-- **SQLx CLI**: Installed via `cargo install sqlx-cli --no-default-features --features postgres`
-
-### Setup Instructions
+### Installation Steps
 
 1. **Clone the Repository**:
    ```bash
@@ -397,52 +284,35 @@ pub enum AppError {
    cd okane/server
    ```
 
-2. **Configure Environment Variables**:
-   Create a `.env` file in the `/server` root directory:
-   ```env
-   DATABASE_URL=postgres://postgres:password@localhost:5432/okane_db
-   JWT_SECRET=your_super_secret_jwt_key_here
-   PAYMONGO_SECRET_KEY=sk_test_your_paymongo_secret_key
-   PAYMONGO_WEBHOOK_SECRET=whsk_your_paymongo_webhook_secret
-   FRONTEND_ORIGIN=http://localhost:8081
-   ADDR=127.0.0.1:3000
-   COOKIE_SECURE=false
-   ```
-
-3. **Run Database Migrations**:
+2. **Database Provisioning**:
+   Ensure PostgreSQL is running, then execute database creation and migrations:
    ```bash
    sqlx database create
    sqlx migrate run
    ```
 
-4. **Start Development Server**:
+3. **Build and Run**:
    ```bash
    cargo run
    ```
-   The server will start listening on `http://127.0.0.1:3000`. Test server health:
+
+4. **Verify Health Endpoint**:
    ```bash
    curl http://127.0.0.1:3000/health
-   # Returns: OK
+   # Response: OK
    ```
 
 ---
 
-## 👨‍💻 Key Engineering & Design Decisions
+## 👨‍💻 Key Architectural Principles
 
-1. **Why Rust for Financial Services?**
-   Rust delivers C-like performance with compile-time memory safety, eliminating buffer overflows, data races, and null pointer exceptions—critical guarantees when handling monetary assets.
-
-2. **Dynamic Ledger Computation vs. Static Column Mutation**
-   Rather than performing destructive column mutations directly on user balance cells, Okane dynamically computes balances from immutable transaction logs. This prevents race conditions and balance desynchronization.
-
-3. **Fixed-Point Decimal Over Floating-Point**
-   Using `rust_decimal` prevents classical binary floating-point representation bugs (e.g. `0.1 + 0.2 != 0.3`). SQLx natively binds `Decimal` to PostgreSQL's `NUMERIC(30, 2)` type for absolute financial precision.
-
-4. **Webhook Replay Protection & Idempotency**
-   By embedding a unique `transaction_uuid` inside PayMongo request metadata, the webhook handler guarantees that pending deposit records are explicitly paired with completed settlement records, preventing duplicate balance credits.
+1. **Memory Safety & High Concurrency**: Rust's borrow checker guarantees data-race freedom and memory safety across concurrent async tasks without garbage collection pauses.
+2. **Immutable Double-Entry Ledger**: Account balances are dynamically audited from complete transaction logs rather than mutative overwrites, ensuring data integrity.
+3. **Fixed-Point Financial Arithmetic**: Uses explicit decimal precision to avoid floating-point loss in financial transactions.
+4. **Idempotent Webhook Settlement**: Links pending and completed entries via unique correlation tokens to prevent duplicate balance adjustments.
 
 ---
 
 ## 📜 License
 
-This project is open-source and available under the [MIT License](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
